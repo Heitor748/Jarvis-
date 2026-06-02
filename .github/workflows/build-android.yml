@@ -30,11 +30,22 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android
 
-      - name: Fix Kotlin version (compatibilidade)
+      - name: Fix Compose/Kotlin compatibility
         run: |
-          sed -i 's/kotlinVersion = "[^"]*"/kotlinVersion = "1.9.24"/' android/build.gradle || true
           echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
-          echo "kotlin.version=1.9.24" >> android/gradle.properties
+          cat >> android/build.gradle << 'GRADLE_EOF'
+
+subprojects {
+    afterEvaluate {
+        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+            kotlinOptions.freeCompilerArgs += [
+                "-P",
+                "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.25"
+            ]
+        }
+    }
+}
+GRADLE_EOF
 
       - name: Build APK debug
         run: |
