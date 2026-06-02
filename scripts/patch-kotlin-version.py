@@ -1,28 +1,38 @@
-import re
+"""
+Alinha a versao do Kotlin para resolver o conflito Kotlin/Compose Compiler.
 
-with open('android/build.gradle', 'r') as f:
-    content = f.read()
+Causa raiz:
+- O build.gradle raiz define ext.kotlinVersion com default '1.9.25'.
+- expo-modules-core usa esse valor para escolher o Compose Compiler via
+  versionsMap: "1.9.24"->"1.5.14", "1.9.25"->"1.5.15".
+- Mas o @react-native/gradle-plugin (RN 0.76.x) fixa o kotlin-gradle-plugin
+  em 1.9.24. Como o classpath em build.gradle nao fixa versao, o Kotlin real
+  e 1.9.24, mas o Compose Compiler escolhido era 1.5.15 (exige 1.9.25) -> erro.
 
-patterns = [
-    r'(kotlinVersion\s*=\s*["\'])([^"\']+)(["\'])',
-    r'(kotlin_version\s*=\s*["\'])([^"\']+)(["\'])',
-]
+Correcao: forcar android.kotlinVersion=1.9.24 em gradle.properties. Assim:
+- ext.kotlinVersion = 1.9.24
+- Compose Compiler = 1.5.14 (exige Kotlin 1.9.24)
+- kotlin-gradle-plugin = 1.9.24
+Tudo consistente.
+"""
 
-modified = False
-for pattern in patterns:
-    new_content = re.sub(pattern, r'\g<1>1.9.25\3', content)
-    if new_content != content:
-        content = new_content
-        modified = True
-        print("Patched kotlinVersion to 1.9.25 in android/build.gradle")
+KOTLIN_VERSION = "1.9.24"
+PROPS_PATH = "android/gradle.properties"
 
-if not modified:
-    print("kotlinVersion not found in build.gradle, adding to gradle.properties")
-    with open('android/gradle.properties', 'a') as f:
-        f.write('\nkotlin.version=1.9.25\n')
-    print("Added kotlin.version=1.9.25 to android/gradle.properties")
-else:
-    with open('android/build.gradle', 'w') as f:
-        f.write(content)
+with open(PROPS_PATH, "r") as f:
+    lines = f.readlines()
 
-print("Kotlin version patch complete")
+# Remove qualquer definicao previa (de execucoes anteriores) e reescreve.
+filtered = [ln for ln in lines if not ln.strip().startswith("android.kotlinVersion=")]
+
+if filtered and not filtered[-1].endswith("\n"):
+    filtered[-1] += "\n"
+
+filtered.append(f"android.kotlinVersion={KOTLIN_VERSION}\n")
+
+with open(PROPS_PATH, "w") as f:
+    f.writelines(filtered)
+
+print(f"Set android.kotlinVersion={KOTLIN_VERSION} em {PROPS_PATH}")
+print("--- gradle.properties (ultimas linhas) ---")
+print("".join(filtered[-5:]))

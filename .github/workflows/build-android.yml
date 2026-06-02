@@ -30,13 +30,11 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --no-install
 
-      - name: Patch Kotlin version to 1.9.25
+      - name: Align Kotlin/Compose version (1.9.24)
         run: |
           echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
           echo "org.gradle.daemon=false" >> android/gradle.properties
           python3 scripts/patch-kotlin-version.py
-          echo "=== android/build.gradle (first 30 lines) ==="
-          head -30 android/build.gradle
 
       - name: Build APK debug
         run: |
