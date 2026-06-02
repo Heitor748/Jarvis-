@@ -1,0 +1,40 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [claude/jarvis-voice-assistant-Svm3h, main]
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: 'Build profile'
+        required: false
+        default: 'preview'
+
+jobs:
+  build:
+    name: Build APK (EAS)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Build Android APK
+        run: eas build --platform android --profile preview --non-interactive --no-wait
+
+      - name: Print build URL
+        run: echo "✅ Build iniciado! Acompanhe em https://expo.dev/accounts/heitor748/projects/jarvis-assistant/builds"
