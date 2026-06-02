@@ -5,6 +5,9 @@ on:
     branches: [claude/jarvis-voice-assistant-Svm3h, main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build APK
@@ -57,3 +60,23 @@ jobs:
           name: JARVIS-android
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+
+      - name: Rename APK
+        if: success()
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk JARVIS.apk
+
+      - name: Publish Release (download direto do APK)
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: JARVIS - último APK
+          body: |
+            APK de debug do JARVIS gerado automaticamente.
+
+            **Como instalar:** toque em `JARVIS.apk` abaixo para baixar,
+            depois abra o arquivo e permita a instalação de fontes desconhecidas.
+
+            Commit: ${{ github.sha }}
+          files: JARVIS.apk
+          make_latest: true
