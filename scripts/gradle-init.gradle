@@ -1,0 +1,14 @@
+allprojects {
+    afterEvaluate { proj ->
+        try {
+            proj.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                kotlinOptions.freeCompilerArgs += [
+                    "-P",
+                    "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.25"
+                ]
+            }
+        } catch (Exception ignored) {
+            println("compose-compat: skipped for ${proj.name}")
+        }
+    }
+}

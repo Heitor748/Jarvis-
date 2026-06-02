@@ -28,31 +28,42 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Expo Prebuild
-        run: npx expo prebuild --platform android
+        run: npx expo prebuild --platform android --no-install
 
-      - name: Fix Compose/Kotlin compatibility
+      - name: Configure Gradle
         run: |
-          echo "org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
-          cat >> android/build.gradle << 'GRADLE_EOF'
+          echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
+          echo "org.gradle.daemon=false" >> android/gradle.properties
+          mkdir -p ~/.gradle/init.d
+          cp scripts/gradle-init.gradle ~/.gradle/init.d/compose-compat.gradle
 
-subprojects {
-    afterEvaluate {
-        tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-            kotlinOptions.freeCompilerArgs += [
-                "-P",
-                "plugin:androidx.compose.compiler.plugins.kotlin:suppressKotlinVersionCompatibilityCheck=1.9.25"
-            ]
-        }
-    }
-}
-GRADLE_EOF
+      - name: Show generated build files
+        run: |
+          echo "=== android/build.gradle ==="
+          cat android/build.gradle
+          echo ""
+          echo "=== android/app/build.gradle ==="
+          cat android/app/build.gradle
+          echo ""
+          echo "=== android/gradle.properties ==="
+          cat android/gradle.properties
 
       - name: Build APK debug
         run: |
+          set -o pipefail
           chmod +x android/gradlew
-          cd android && ./gradlew assembleDebug --no-daemon
+          cd android && ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build.log
 
-      - name: Upload APK ⬇️
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: /tmp/build.log
+          retention-days: 7
+
+      - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: JARVIS-android
