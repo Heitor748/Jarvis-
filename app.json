@@ -18,7 +18,6 @@
       "package": "com.jarvis.assistant"
     },
     "plugins": [
-      "expo-router",
       [
         "expo-av",
         {
@@ -26,10 +25,6 @@
         }
       ]
     ],
-    "scheme": "jarvis",
-    "owner": "heitor748",
-    "experiments": {
-      "typedRoutes": true
-    }
+    "owner": "heitor748"
   }
 }
