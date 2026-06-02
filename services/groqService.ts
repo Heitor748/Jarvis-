@@ -1,4 +1,5 @@
 import { GROQ_MODEL, WHISPER_MODEL } from '../constants/personality';
+import { MODELS } from '../constants/models';
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 
@@ -39,7 +40,8 @@ export async function transcribeAudio(
 
 export async function chatCompletion(
   messages: ChatMessage[],
-  apiKey: string
+  apiKey: string,
+  model: string = MODELS.scout.id
 ): Promise<string> {
   const res = await fetch(`${GROQ_BASE}/chat/completions`, {
     method: 'POST',
@@ -48,7 +50,7 @@ export async function chatCompletion(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: GROQ_MODEL,
+      model: model || GROQ_MODEL,
       messages,
       max_tokens: 1024,
       temperature: 0.7,

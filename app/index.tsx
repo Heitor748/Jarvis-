@@ -18,15 +18,20 @@ import { InputBar } from '../components/InputBar';
 import { SettingsModal } from '../components/SettingsModal';
 import { ScanLines } from '../components/ScanLines';
 import { colors, fontFamily } from '../constants/theme';
+import { modelLabelForMode } from '../constants/models';
 
 export default function HomeScreen() {
   const {
     state,
     messages,
     apiKey,
+    elevenKey,
+    modelMode,
     error,
     isReady,
     saveApiKey,
+    saveElevenKey,
+    saveModelMode,
     sendText,
     toggleListening,
     clearHistory,
@@ -97,9 +102,10 @@ export default function HomeScreen() {
 
           {/* System info */}
           <View style={styles.sysInfo}>
-            <Text style={styles.sysText}>GROQ · LLAMA 4</Text>
+            <Text style={styles.sysText}>GROQ · {modelLabelForMode(modelMode)}</Text>
+            <Text style={styles.sysText}>{elevenKey ? '🎙 VOZ HD' : '🔊 VOZ PADRÃO'}</Text>
             <Text style={styles.sysText}>
-              {apiKey ? '🔑 API KEY OK' : '⚠ SEM API KEY'}
+              {apiKey ? '🔑 OK' : '⚠ SEM CHAVE'}
             </Text>
           </View>
         </View>
@@ -140,7 +146,11 @@ export default function HomeScreen() {
       <SettingsModal
         visible={showSettings}
         currentKey={apiKey}
+        elevenKey={elevenKey}
+        modelMode={modelMode}
         onSave={saveApiKey}
+        onSaveEleven={saveElevenKey}
+        onSaveModelMode={saveModelMode}
         onClose={() => setShowSettings(false)}
       />
     </SafeAreaView>

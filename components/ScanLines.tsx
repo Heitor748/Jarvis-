@@ -11,7 +11,7 @@ export function ScanLines() {
           style={[
             styles.line,
             {
-              top: i * (100 / 50) + '%',
+              top: `${i * (100 / 50)}%` as const,
               opacity: i % 2 === 0 ? 0.018 : 0,
             },
           ]}

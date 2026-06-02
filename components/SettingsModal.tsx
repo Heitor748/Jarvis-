@@ -11,26 +11,49 @@ import {
   Linking,
 } from 'react-native';
 import { colors, fontFamily } from '../constants/theme';
+import { ModelMode } from '../constants/models';
 
 interface Props {
   visible: boolean;
   currentKey: string;
+  elevenKey: string;
+  modelMode: ModelMode;
   onSave: (key: string) => void;
+  onSaveEleven: (key: string) => void;
+  onSaveModelMode: (mode: ModelMode) => void;
   onClose: () => void;
 }
 
-export function SettingsModal({ visible, currentKey, onSave, onClose }: Props) {
+const MODEL_OPTIONS: { mode: ModelMode; label: string; desc: string }[] = [
+  { mode: 'auto', label: 'AUTO', desc: 'Escolhe sozinho' },
+  { mode: 'fast', label: 'RÁPIDO', desc: 'Llama 3.1 8B' },
+  { mode: 'smart', label: 'POTENTE', desc: 'Llama 3.3 70B' },
+  { mode: 'scout', label: 'SCOUT', desc: 'Llama 4' },
+];
+
+export function SettingsModal({
+  visible,
+  currentKey,
+  elevenKey,
+  modelMode,
+  onSave,
+  onSaveEleven,
+  onSaveModelMode,
+  onClose,
+}: Props) {
   const [key, setKey] = useState(currentKey);
   const [showKey, setShowKey] = useState(false);
+  const [eleven, setEleven] = useState(elevenKey);
+  const [showEleven, setShowEleven] = useState(false);
 
   function handleSave() {
-    if (key.trim()) {
-      onSave(key.trim());
-      onClose();
-    }
+    if (key.trim()) onSave(key.trim());
+    onSaveEleven(eleven.trim());
+    onClose();
   }
 
   const masked = key ? key.slice(0, 4) + '••••••••••••••••' + key.slice(-4) : '';
+  const elevenMasked = eleven ? eleven.slice(0, 4) + '••••••••••••' + eleven.slice(-4) : '';
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -79,10 +102,54 @@ export function SettingsModal({ visible, currentKey, onSave, onClose }: Props) {
               </TouchableOpacity>
             </View>
 
-            {/* Model info */}
+            {/* Voz ElevenLabs */}
+            <View style={styles.divider} />
+            <Text style={styles.sectionLabel}>VOZ · ELEVENLABS (OPCIONAL)</Text>
+            <Text style={styles.hint}>
+              Voz premium estilo filme. Sem chave, usa a voz do aparelho.{' '}
+              <Text
+                style={styles.link}
+                onPress={() => Linking.openURL('https://elevenlabs.io/app/settings/api-keys')}
+              >
+                elevenlabs.io
+              </Text>
+            </Text>
+            <View style={styles.inputRow}>
+              <TextInput
+                style={styles.input}
+                value={showEleven ? eleven : elevenMasked}
+                onChangeText={setEleven}
+                onFocus={() => { setShowEleven(true); setEleven(elevenKey); }}
+                placeholder="sk_..."
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity onPress={() => setShowEleven((v) => !v)} style={styles.eyeBtn}>
+                <Text style={styles.eyeIcon}>{showEleven ? '🙈' : '👁'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Seletor de modelo */}
             <View style={styles.divider} />
             <Text style={styles.sectionLabel}>MODELO DE IA</Text>
-            <Text style={styles.modelText}>Llama 4 Scout · Groq Cloud</Text>
+            <View style={styles.modelGrid}>
+              {MODEL_OPTIONS.map((opt) => {
+                const active = opt.mode === modelMode;
+                return (
+                  <TouchableOpacity
+                    key={opt.mode}
+                    style={[styles.modelChip, active && styles.modelChipActive]}
+                    onPress={() => onSaveModelMode(opt.mode)}
+                  >
+                    <Text style={[styles.modelChipLabel, active && styles.modelChipLabelActive]}>
+                      {opt.label}
+                    </Text>
+                    <Text style={styles.modelChipDesc}>{opt.desc}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <Text style={styles.modelText}>Whisper Large v3 Turbo · STT</Text>
 
             {/* Buttons */}
@@ -194,6 +261,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily,
     marginBottom: 4,
+  },
+  modelGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  modelChip: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  modelChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryMuted,
+  },
+  modelChipLabel: {
+    color: colors.textSecondary,
+    fontFamily,
+    fontSize: 12,
+    letterSpacing: 2,
+    fontWeight: 'bold',
+  },
+  modelChipLabelActive: {
+    color: colors.primary,
+  },
+  modelChipDesc: {
+    color: colors.textMuted,
+    fontFamily,
+    fontSize: 9,
+    marginTop: 2,
   },
   btnRow: {
     flexDirection: 'row',

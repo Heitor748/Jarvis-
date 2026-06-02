@@ -3,7 +3,9 @@ import { Audio } from 'expo-av';
 import * as Speech from 'expo-speech';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { transcribeAudio, chatCompletion, ChatMessage } from '../services/groqService';
+import { speakWithElevenLabs, stopElevenLabs } from '../services/elevenLabsService';
 import { JARVIS_SYSTEM_PROMPT, WAKE_WORDS } from '../constants/personality';
+import { pickModel, ModelMode } from '../constants/models';
 
 export type JarvisState = 'idle' | 'listening' | 'processing' | 'speaking' | 'error';
 
@@ -15,6 +17,8 @@ export interface Message {
 }
 
 const API_KEY_STORAGE = '@jarvis_groq_api_key';
+const ELEVEN_KEY_STORAGE = '@jarvis_eleven_api_key';
+const MODEL_MODE_STORAGE = '@jarvis_model_mode';
 
 function stripWakeWord(text: string): string {
   const lower = text.toLowerCase().trim();
@@ -26,13 +30,14 @@ function stripWakeWord(text: string): string {
   return text.trim();
 }
 
-async function speakAsync(text: string): Promise<void> {
+// Voz nativa do aparelho (fallback): masculina, grave e pausada.
+async function speakWithDevice(text: string): Promise<void> {
   return Promise.race([
     new Promise<void>((resolve) => {
       Speech.speak(text, {
         language: 'pt-BR',
-        pitch: 1.0,
-        rate: 0.92,
+        pitch: 0.85,
+        rate: 0.9,
         onDone: resolve,
         onError: () => resolve(),
         onStopped: resolve,
@@ -42,22 +47,48 @@ async function speakAsync(text: string): Promise<void> {
   ]);
 }
 
+// Fala usando ElevenLabs se houver chave; senao (ou em caso de erro) usa a
+// voz do aparelho. Nunca lanca — sempre tenta deixar o JARVIS falar.
+async function speak(text: string, elevenKey: string): Promise<void> {
+  if (elevenKey) {
+    try {
+      await speakWithElevenLabs(text, elevenKey);
+      return;
+    } catch {
+      // cai para a voz do aparelho
+    }
+  }
+  await speakWithDevice(text);
+}
+
 export function useJarvis() {
   const [state, setState] = useState<JarvisState>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
   const [apiKey, setApiKeyState] = useState('');
+  const [elevenKey, setElevenKeyState] = useState('');
+  const [modelMode, setModelModeState] = useState<ModelMode>('auto');
   const [error, setError] = useState('');
   const [isReady, setIsReady] = useState(false);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const historyRef = useRef<ChatMessage[]>([]);
   const stateRef = useRef<JarvisState>('idle');
+  const elevenKeyRef = useRef('');
+  const modelModeRef = useRef<ModelMode>('auto');
 
   stateRef.current = state;
+  elevenKeyRef.current = elevenKey;
+  modelModeRef.current = modelMode;
 
   useEffect(() => {
-    AsyncStorage.getItem(API_KEY_STORAGE).then((key) => {
-      if (key) setApiKeyState(key);
+    Promise.all([
+      AsyncStorage.getItem(API_KEY_STORAGE),
+      AsyncStorage.getItem(ELEVEN_KEY_STORAGE),
+      AsyncStorage.getItem(MODEL_MODE_STORAGE),
+    ]).then(([gk, ek, mm]) => {
+      if (gk) setApiKeyState(gk);
+      if (ek) setElevenKeyState(ek);
+      if (mm) setModelModeState(mm as ModelMode);
       setIsReady(true);
     });
   }, []);
@@ -66,6 +97,17 @@ export function useJarvis() {
     const trimmed = key.trim();
     await AsyncStorage.setItem(API_KEY_STORAGE, trimmed);
     setApiKeyState(trimmed);
+  }, []);
+
+  const saveElevenKey = useCallback(async (key: string) => {
+    const trimmed = key.trim();
+    await AsyncStorage.setItem(ELEVEN_KEY_STORAGE, trimmed);
+    setElevenKeyState(trimmed);
+  }, []);
+
+  const saveModelMode = useCallback(async (mode: ModelMode) => {
+    await AsyncStorage.setItem(MODEL_MODE_STORAGE, mode);
+    setModelModeState(mode);
   }, []);
 
   const addMessage = useCallback((role: 'user' | 'assistant', content: string): Message => {
@@ -159,7 +201,8 @@ export function useJarvis() {
         ...historyRef.current.slice(-12),
       ];
 
-      const reply = await chatCompletion(toSend, key);
+      const model = pickModel(command, modelModeRef.current);
+      const reply = await chatCompletion(toSend, key, model.id);
       if (!reply) throw new Error('Resposta vazia do servidor');
 
       addMessage('assistant', reply);
@@ -167,7 +210,7 @@ export function useJarvis() {
 
       setState('speaking');
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      await speakAsync(reply);
+      await speak(reply, elevenKeyRef.current);
       setState('idle');
     } catch (e) {
       handleError(e instanceof Error ? e.message : 'Erro ao processar voz');
@@ -198,14 +241,15 @@ export function useJarvis() {
         ...historyRef.current.slice(-12),
       ];
 
-      const reply = await chatCompletion(toSend, key);
+      const model = pickModel(userText, modelModeRef.current);
+      const reply = await chatCompletion(toSend, key, model.id);
       if (!reply) throw new Error('Resposta vazia do servidor');
 
       addMessage('assistant', reply);
       historyRef.current = [...historyRef.current, { role: 'assistant', content: reply }];
 
       setState('speaking');
-      await speakAsync(reply);
+      await speak(reply, elevenKeyRef.current);
       setState('idle');
     } catch (e) {
       handleError(e instanceof Error ? e.message : 'Erro ao processar texto');
@@ -214,6 +258,7 @@ export function useJarvis() {
 
   const stopSpeaking = useCallback(() => {
     Speech.stop();
+    stopElevenLabs();
     setState('idle');
   }, []);
 
@@ -236,9 +281,13 @@ export function useJarvis() {
     state,
     messages,
     apiKey,
+    elevenKey,
+    modelMode,
     error,
     isReady,
     saveApiKey,
+    saveElevenKey,
+    saveModelMode,
     startListening,
     stopListening,
     sendText,
