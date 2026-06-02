@@ -5,7 +5,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { transcribeAudio, chatCompletion, ChatMessage } from '../services/groqService';
 import { speakWithElevenLabs, stopElevenLabs } from '../services/elevenLabsService';
 import { JARVIS_SYSTEM_PROMPT, WAKE_WORDS } from '../constants/personality';
-import { pickModel, ModelMode } from '../constants/models';
+import {
+  PROVIDERS,
+  ProviderMode,
+  ResolvedProvider,
+  pickProvider,
+} from '../constants/providers';
 
 export type JarvisState = 'idle' | 'listening' | 'processing' | 'speaking' | 'error';
 
@@ -16,9 +21,21 @@ export interface Message {
   timestamp: number;
 }
 
-const API_KEY_STORAGE = '@jarvis_groq_api_key';
-const ELEVEN_KEY_STORAGE = '@jarvis_eleven_api_key';
-const MODEL_MODE_STORAGE = '@jarvis_model_mode';
+// Chaves de armazenamento.
+const STORE = {
+  groqKey: '@jarvis_groq_api_key',
+  flowKey: '@jarvis_flow_api_key',
+  agnesKey: '@jarvis_agnes_api_key',
+  agnesBaseUrl: '@jarvis_agnes_base_url',
+  agnesModel: '@jarvis_agnes_model',
+  elevenKey: '@jarvis_eleven_api_key',
+  providerMode: '@jarvis_provider_mode',
+};
+
+export interface AgnesConfig {
+  baseUrl: string;
+  model: string;
+}
 
 function stripWakeWord(text: string): string {
   const lower = text.toLowerCase().trim();
@@ -47,67 +64,95 @@ async function speakWithDevice(text: string): Promise<void> {
   ]);
 }
 
-// Fala usando ElevenLabs se houver chave; senao (ou em caso de erro) usa a
-// voz do aparelho. Nunca lanca — sempre tenta deixar o JARVIS falar.
-async function speak(text: string, elevenKey: string): Promise<void> {
-  if (elevenKey) {
-    try {
-      await speakWithElevenLabs(text, elevenKey);
-      return;
-    } catch {
-      // cai para a voz do aparelho
-    }
-  }
-  await speakWithDevice(text);
-}
-
 export function useJarvis() {
   const [state, setState] = useState<JarvisState>('idle');
   const [messages, setMessages] = useState<Message[]>([]);
   const [apiKey, setApiKeyState] = useState('');
+  const [flowKey, setFlowKeyState] = useState('');
+  const [agnesKey, setAgnesKeyState] = useState('');
+  const [agnesConfig, setAgnesConfigState] = useState<AgnesConfig>({ baseUrl: '', model: '' });
   const [elevenKey, setElevenKeyState] = useState('');
-  const [modelMode, setModelModeState] = useState<ModelMode>('auto');
+  const [providerMode, setProviderModeState] = useState<ProviderMode>('auto');
   const [error, setError] = useState('');
   const [isReady, setIsReady] = useState(false);
 
   const recordingRef = useRef<Audio.Recording | null>(null);
   const historyRef = useRef<ChatMessage[]>([]);
   const stateRef = useRef<JarvisState>('idle');
-  const elevenKeyRef = useRef('');
-  const modelModeRef = useRef<ModelMode>('auto');
+
+  // Refs com os valores atuais para uso dentro de callbacks async.
+  const cfg = useRef({
+    groqKey: '',
+    flowKey: '',
+    agnesKey: '',
+    agnesBaseUrl: '',
+    agnesModel: '',
+    elevenKey: '',
+    providerMode: 'auto' as ProviderMode,
+  });
 
   stateRef.current = state;
-  elevenKeyRef.current = elevenKey;
-  modelModeRef.current = modelMode;
+  cfg.current = {
+    groqKey: apiKey,
+    flowKey,
+    agnesKey,
+    agnesBaseUrl: agnesConfig.baseUrl,
+    agnesModel: agnesConfig.model,
+    elevenKey,
+    providerMode,
+  };
 
   useEffect(() => {
     Promise.all([
-      AsyncStorage.getItem(API_KEY_STORAGE),
-      AsyncStorage.getItem(ELEVEN_KEY_STORAGE),
-      AsyncStorage.getItem(MODEL_MODE_STORAGE),
-    ]).then(([gk, ek, mm]) => {
+      AsyncStorage.getItem(STORE.groqKey),
+      AsyncStorage.getItem(STORE.flowKey),
+      AsyncStorage.getItem(STORE.agnesKey),
+      AsyncStorage.getItem(STORE.agnesBaseUrl),
+      AsyncStorage.getItem(STORE.agnesModel),
+      AsyncStorage.getItem(STORE.elevenKey),
+      AsyncStorage.getItem(STORE.providerMode),
+    ]).then(([gk, fk, ak, abu, am, ek, pm]) => {
       if (gk) setApiKeyState(gk);
+      if (fk) setFlowKeyState(fk);
+      if (ak) setAgnesKeyState(ak);
+      setAgnesConfigState({ baseUrl: abu ?? '', model: am ?? '' });
       if (ek) setElevenKeyState(ek);
-      if (mm) setModelModeState(mm as ModelMode);
+      if (pm) setProviderModeState(pm as ProviderMode);
       setIsReady(true);
     });
   }, []);
 
   const saveApiKey = useCallback(async (key: string) => {
-    const trimmed = key.trim();
-    await AsyncStorage.setItem(API_KEY_STORAGE, trimmed);
-    setApiKeyState(trimmed);
+    const t = key.trim();
+    await AsyncStorage.setItem(STORE.groqKey, t);
+    setApiKeyState(t);
+  }, []);
+
+  const saveFlowKey = useCallback(async (key: string) => {
+    const t = key.trim();
+    await AsyncStorage.setItem(STORE.flowKey, t);
+    setFlowKeyState(t);
+  }, []);
+
+  const saveAgnes = useCallback(async (key: string, baseUrl: string, model: string) => {
+    await AsyncStorage.multiSet([
+      [STORE.agnesKey, key.trim()],
+      [STORE.agnesBaseUrl, baseUrl.trim()],
+      [STORE.agnesModel, model.trim()],
+    ]);
+    setAgnesKeyState(key.trim());
+    setAgnesConfigState({ baseUrl: baseUrl.trim(), model: model.trim() });
   }, []);
 
   const saveElevenKey = useCallback(async (key: string) => {
-    const trimmed = key.trim();
-    await AsyncStorage.setItem(ELEVEN_KEY_STORAGE, trimmed);
-    setElevenKeyState(trimmed);
+    const t = key.trim();
+    await AsyncStorage.setItem(STORE.elevenKey, t);
+    setElevenKeyState(t);
   }, []);
 
-  const saveModelMode = useCallback(async (mode: ModelMode) => {
-    await AsyncStorage.setItem(MODEL_MODE_STORAGE, mode);
-    setModelModeState(mode);
+  const saveProviderMode = useCallback(async (mode: ProviderMode) => {
+    await AsyncStorage.setItem(STORE.providerMode, mode);
+    setProviderModeState(mode);
   }, []);
 
   const addMessage = useCallback((role: 'user' | 'assistant', content: string): Message => {
@@ -121,20 +166,72 @@ export function useJarvis() {
     return msg;
   }, []);
 
-  const getKey = useCallback(async (): Promise<string> => {
-    if (apiKey) return apiKey;
-    const stored = await AsyncStorage.getItem(API_KEY_STORAGE);
-    return stored ?? '';
-  }, [apiKey]);
-
   const handleError = useCallback((msg: string) => {
     setError(msg);
     setState('error');
     setTimeout(() => {
       setError('');
       setState('idle');
-    }, 4000);
+    }, 4500);
   }, []);
+
+  // Mostra um aviso sem travar o fluxo (ex.: ElevenLabs falhou mas a voz do
+  // aparelho assumiu).
+  const softWarn = useCallback((msg: string) => {
+    setError(msg);
+    setTimeout(() => setError(''), 5000);
+  }, []);
+
+  // Quais provedores estao configurados (tem chave).
+  const availability = useCallback(() => {
+    const c = cfg.current;
+    return {
+      groq: !!c.groqKey,
+      flow: !!c.flowKey,
+      agnes: !!c.agnesKey && !!c.agnesBaseUrl && !!c.agnesModel,
+    };
+  }, []);
+
+  // Monta a config pronta para chamar a API do provedor escolhido.
+  const resolveProvider = useCallback((id: 'groq' | 'flow' | 'agnes'): ResolvedProvider => {
+    const c = cfg.current;
+    if (id === 'flow') {
+      return { id, baseUrl: PROVIDERS.flow.baseUrl, apiKey: c.flowKey, model: PROVIDERS.flow.defaultModel };
+    }
+    if (id === 'agnes') {
+      return { id, baseUrl: c.agnesBaseUrl, apiKey: c.agnesKey, model: c.agnesModel };
+    }
+    return { id: 'groq', baseUrl: PROVIDERS.groq.baseUrl, apiKey: c.groqKey, model: PROVIDERS.groq.defaultModel };
+  }, []);
+
+  // Fala usando ElevenLabs se houver chave; senao (ou em erro) usa a voz do
+  // aparelho. Nunca lanca — sempre tenta deixar o JARVIS falar.
+  const speak = useCallback(async (text: string) => {
+    const ek = cfg.current.elevenKey;
+    if (ek) {
+      try {
+        await speakWithElevenLabs(text, ek);
+        return;
+      } catch (e) {
+        softWarn(`Voz HD indisponível (${e instanceof Error ? e.message : 'erro'}). Usando voz padrão.`);
+      }
+    }
+    await speakWithDevice(text);
+  }, [softWarn]);
+
+  // Envia a conversa ao provedor escolhido e retorna a resposta.
+  const askLLM = useCallback(async (commandText: string): Promise<string> => {
+    const id = pickProvider(commandText, cfg.current.providerMode, availability());
+    const provider = resolveProvider(id);
+    if (!provider.apiKey) {
+      throw new Error('Nenhum provedor de IA configurado. Adicione uma chave nas configurações.');
+    }
+    const toSend: ChatMessage[] = [
+      { role: 'system', content: JARVIS_SYSTEM_PROMPT },
+      ...historyRef.current.slice(-12),
+    ];
+    return chatCompletion(toSend, provider);
+  }, [availability, resolveProvider]);
 
   const startListening = useCallback(async () => {
     if (stateRef.current !== 'idle') return;
@@ -170,9 +267,8 @@ export function useJarvis() {
     recordingRef.current = null;
     setState('processing');
 
-    const key = await getKey();
-    if (!key) {
-      handleError('Configure a API key do Groq nas configurações');
+    if (!cfg.current.groqKey) {
+      handleError('Configure a chave do Groq nas configurações (necessária para ouvir você)');
       return;
     }
 
@@ -181,7 +277,7 @@ export function useJarvis() {
       const uri = rec.getURI();
       if (!uri) throw new Error('Nenhum áudio gravado');
 
-      const transcript = await transcribeAudio(uri, key);
+      const transcript = await transcribeAudio(uri, cfg.current.groqKey);
       if (!transcript) {
         setState('idle');
         return;
@@ -196,13 +292,7 @@ export function useJarvis() {
       addMessage('user', command);
       historyRef.current = [...historyRef.current, { role: 'user', content: command }];
 
-      const toSend: ChatMessage[] = [
-        { role: 'system', content: JARVIS_SYSTEM_PROMPT },
-        ...historyRef.current.slice(-12),
-      ];
-
-      const model = pickModel(command, modelModeRef.current);
-      const reply = await chatCompletion(toSend, key, model.id);
+      const reply = await askLLM(command);
       if (!reply) throw new Error('Resposta vazia do servidor');
 
       addMessage('assistant', reply);
@@ -210,21 +300,15 @@ export function useJarvis() {
 
       setState('speaking');
       await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true });
-      await speak(reply, elevenKeyRef.current);
+      await speak(reply);
       setState('idle');
     } catch (e) {
       handleError(e instanceof Error ? e.message : 'Erro ao processar voz');
     }
-  }, [getKey, addMessage, handleError]);
+  }, [handleError, addMessage, askLLM, speak]);
 
   const sendText = useCallback(async (text: string) => {
     if (stateRef.current !== 'idle' || !text.trim()) return;
-
-    const key = await getKey();
-    if (!key) {
-      handleError('Configure a API key do Groq nas configurações');
-      return;
-    }
 
     setError('');
     setState('processing');
@@ -236,25 +320,19 @@ export function useJarvis() {
     historyRef.current = [...historyRef.current, { role: 'user', content: userText }];
 
     try {
-      const toSend: ChatMessage[] = [
-        { role: 'system', content: JARVIS_SYSTEM_PROMPT },
-        ...historyRef.current.slice(-12),
-      ];
-
-      const model = pickModel(userText, modelModeRef.current);
-      const reply = await chatCompletion(toSend, key, model.id);
+      const reply = await askLLM(userText);
       if (!reply) throw new Error('Resposta vazia do servidor');
 
       addMessage('assistant', reply);
       historyRef.current = [...historyRef.current, { role: 'assistant', content: reply }];
 
       setState('speaking');
-      await speak(reply, elevenKeyRef.current);
+      await speak(reply);
       setState('idle');
     } catch (e) {
       handleError(e instanceof Error ? e.message : 'Erro ao processar texto');
     }
-  }, [getKey, addMessage, handleError]);
+  }, [handleError, addMessage, askLLM, speak]);
 
   const stopSpeaking = useCallback(() => {
     Speech.stop();
@@ -281,13 +359,18 @@ export function useJarvis() {
     state,
     messages,
     apiKey,
+    flowKey,
+    agnesKey,
+    agnesConfig,
     elevenKey,
-    modelMode,
+    providerMode,
     error,
     isReady,
     saveApiKey,
+    saveFlowKey,
+    saveAgnes,
     saveElevenKey,
-    saveModelMode,
+    saveProviderMode,
     startListening,
     stopListening,
     sendText,

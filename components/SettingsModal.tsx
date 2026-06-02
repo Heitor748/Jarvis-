@@ -9,160 +9,221 @@ import {
   KeyboardAvoidingView,
   Platform,
   Linking,
+  ScrollView,
 } from 'react-native';
 import { colors, fontFamily } from '../constants/theme';
-import { ModelMode } from '../constants/models';
+import { ProviderMode } from '../constants/providers';
 
 interface Props {
   visible: boolean;
-  currentKey: string;
+  groqKey: string;
+  flowKey: string;
+  agnesKey: string;
+  agnesConfig: { baseUrl: string; model: string };
   elevenKey: string;
-  modelMode: ModelMode;
-  onSave: (key: string) => void;
+  providerMode: ProviderMode;
+  onSaveGroq: (key: string) => void;
+  onSaveFlow: (key: string) => void;
+  onSaveAgnes: (key: string, baseUrl: string, model: string) => void;
   onSaveEleven: (key: string) => void;
-  onSaveModelMode: (mode: ModelMode) => void;
+  onSaveProviderMode: (mode: ProviderMode) => void;
   onClose: () => void;
 }
 
-const MODEL_OPTIONS: { mode: ModelMode; label: string; desc: string }[] = [
+const PROVIDER_OPTIONS: { mode: ProviderMode; label: string; desc: string }[] = [
   { mode: 'auto', label: 'AUTO', desc: 'Escolhe sozinho' },
-  { mode: 'fast', label: 'RÁPIDO', desc: 'Llama 3.1 8B' },
-  { mode: 'smart', label: 'POTENTE', desc: 'Llama 3.3 70B' },
-  { mode: 'scout', label: 'SCOUT', desc: 'Llama 4' },
+  { mode: 'groq', label: 'GROQ', desc: 'Rápido' },
+  { mode: 'flow', label: 'FLOW', desc: 'DeepSeek' },
+  { mode: 'agnes', label: 'AGNES', desc: 'Custom' },
 ];
+
+function mask(v: string): string {
+  if (!v) return '';
+  if (v.length <= 8) return '••••';
+  return v.slice(0, 4) + '••••••••' + v.slice(-4);
+}
 
 export function SettingsModal({
   visible,
-  currentKey,
+  groqKey,
+  flowKey,
+  agnesKey,
+  agnesConfig,
   elevenKey,
-  modelMode,
-  onSave,
+  providerMode,
+  onSaveGroq,
+  onSaveFlow,
+  onSaveAgnes,
   onSaveEleven,
-  onSaveModelMode,
+  onSaveProviderMode,
   onClose,
 }: Props) {
-  const [key, setKey] = useState(currentKey);
-  const [showKey, setShowKey] = useState(false);
+  const [groq, setGroq] = useState(groqKey);
+  const [flow, setFlow] = useState(flowKey);
+  const [agnes, setAgnes] = useState(agnesKey);
+  const [agnesUrl, setAgnesUrl] = useState(agnesConfig.baseUrl);
+  const [agnesModel, setAgnesModel] = useState(agnesConfig.model);
   const [eleven, setEleven] = useState(elevenKey);
-  const [showEleven, setShowEleven] = useState(false);
+  const [reveal, setReveal] = useState(false);
 
   function handleSave() {
-    if (key.trim()) onSave(key.trim());
+    onSaveGroq(groq.trim());
+    onSaveFlow(flow.trim());
+    onSaveAgnes(agnes.trim(), agnesUrl.trim(), agnesModel.trim());
     onSaveEleven(eleven.trim());
     onClose();
   }
 
-  const masked = key ? key.slice(0, 4) + '••••••••••••••••' + key.slice(-4) : '';
-  const elevenMasked = eleven ? eleven.slice(0, 4) + '••••••••••••' + eleven.slice(-4) : '';
-
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          style={styles.kav}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
           <View style={styles.card}>
-            {/* Header */}
             <View style={styles.header}>
               <Text style={styles.title}>⚙ CONFIGURAÇÕES</Text>
-              <TouchableOpacity onPress={onClose}>
-                <Text style={styles.closeBtn}>✕</Text>
-              </TouchableOpacity>
+              <View style={styles.headerRight}>
+                <TouchableOpacity onPress={() => setReveal((v) => !v)} style={styles.revealBtn}>
+                  <Text style={styles.revealIcon}>{reveal ? '🙈' : '👁'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onClose}>
+                  <Text style={styles.closeBtn}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={styles.divider} />
+            <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+              {/* Seletor de provedor */}
+              <Text style={styles.sectionLabel}>CÉREBRO ATIVO</Text>
+              <View style={styles.grid}>
+                {PROVIDER_OPTIONS.map((opt) => {
+                  const active = opt.mode === providerMode;
+                  return (
+                    <TouchableOpacity
+                      key={opt.mode}
+                      style={[styles.chip, active && styles.chipActive]}
+                      onPress={() => onSaveProviderMode(opt.mode)}
+                    >
+                      <Text style={[styles.chipLabel, active && styles.chipLabelActive]}>
+                        {opt.label}
+                      </Text>
+                      <Text style={styles.chipDesc}>{opt.desc}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
 
-            {/* API Key section */}
-            <Text style={styles.sectionLabel}>GROQ API KEY</Text>
-            <Text style={styles.hint}>
-              Obtenha sua chave em{' '}
-              <Text
-                style={styles.link}
-                onPress={() => Linking.openURL('https://console.groq.com')}
-              >
-                console.groq.com
+              <View style={styles.divider} />
+
+              {/* Groq */}
+              <Text style={styles.sectionLabel}>GROQ API KEY (voz + chat)</Text>
+              <Text style={styles.hint}>
+                Obrigatória (transcreve sua voz).{' '}
+                <Text style={styles.link} onPress={() => Linking.openURL('https://console.groq.com')}>
+                  console.groq.com
+                </Text>
               </Text>
-            </Text>
-
-            <View style={styles.inputRow}>
               <TextInput
                 style={styles.input}
-                value={showKey ? key : masked}
-                onChangeText={setKey}
-                onFocus={() => { setShowKey(true); setKey(currentKey); }}
+                value={reveal ? groq : mask(groq)}
+                onChangeText={setGroq}
+                onFocus={() => setReveal(true)}
                 placeholder="gsk_..."
                 placeholderTextColor={colors.textMuted}
-                secureTextEntry={false}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              <TouchableOpacity
-                onPress={() => setShowKey((v) => !v)}
-                style={styles.eyeBtn}
-              >
-                <Text style={styles.eyeIcon}>{showKey ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Voz ElevenLabs */}
-            <View style={styles.divider} />
-            <Text style={styles.sectionLabel}>VOZ · ELEVENLABS (OPCIONAL)</Text>
-            <Text style={styles.hint}>
-              Voz premium estilo filme. Sem chave, usa a voz do aparelho.{' '}
-              <Text
-                style={styles.link}
-                onPress={() => Linking.openURL('https://elevenlabs.io/app/settings/api-keys')}
-              >
-                elevenlabs.io
+              <View style={styles.divider} />
+
+              {/* SiliconFlow */}
+              <Text style={styles.sectionLabel}>SILICONFLOW API KEY</Text>
+              <Text style={styles.hint}>
+                DeepSeek-V3 (raciocínio).{' '}
+                <Text style={styles.link} onPress={() => Linking.openURL('https://siliconflow.com')}>
+                  siliconflow.com
+                </Text>
               </Text>
-            </Text>
-            <View style={styles.inputRow}>
               <TextInput
                 style={styles.input}
-                value={showEleven ? eleven : elevenMasked}
+                value={reveal ? flow : mask(flow)}
+                onChangeText={setFlow}
+                onFocus={() => setReveal(true)}
+                placeholder="sk-..."
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <View style={styles.divider} />
+
+              {/* Agnes (custom) */}
+              <Text style={styles.sectionLabel}>AGNES (API CUSTOM)</Text>
+              <Text style={styles.hint}>Compatível com OpenAI. Informe URL base, chave e modelo.</Text>
+              <TextInput
+                style={styles.input}
+                value={agnesUrl}
+                onChangeText={setAgnesUrl}
+                placeholder="https://api.agnes.../v1"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+              />
+              <TextInput
+                style={[styles.input, styles.inputSpaced]}
+                value={reveal ? agnes : mask(agnes)}
+                onChangeText={setAgnes}
+                onFocus={() => setReveal(true)}
+                placeholder="chave da API"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TextInput
+                style={[styles.input, styles.inputSpaced]}
+                value={agnesModel}
+                onChangeText={setAgnesModel}
+                placeholder="nome do modelo (ex.: gpt-4o)"
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+
+              <View style={styles.divider} />
+
+              {/* ElevenLabs */}
+              <Text style={styles.sectionLabel}>VOZ · ELEVENLABS (OPCIONAL)</Text>
+              <Text style={styles.hint}>
+                Voz premium estilo filme. Sem chave, usa a voz do aparelho.{' '}
+                <Text
+                  style={styles.link}
+                  onPress={() => Linking.openURL('https://elevenlabs.io/app/settings/api-keys')}
+                >
+                  elevenlabs.io
+                </Text>
+              </Text>
+              <TextInput
+                style={styles.input}
+                value={reveal ? eleven : mask(eleven)}
                 onChangeText={setEleven}
-                onFocus={() => { setShowEleven(true); setEleven(elevenKey); }}
+                onFocus={() => setReveal(true)}
                 placeholder="sk_..."
                 placeholderTextColor={colors.textMuted}
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              <TouchableOpacity onPress={() => setShowEleven((v) => !v)} style={styles.eyeBtn}>
-                <Text style={styles.eyeIcon}>{showEleven ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Seletor de modelo */}
-            <View style={styles.divider} />
-            <Text style={styles.sectionLabel}>MODELO DE IA</Text>
-            <View style={styles.modelGrid}>
-              {MODEL_OPTIONS.map((opt) => {
-                const active = opt.mode === modelMode;
-                return (
-                  <TouchableOpacity
-                    key={opt.mode}
-                    style={[styles.modelChip, active && styles.modelChipActive]}
-                    onPress={() => onSaveModelMode(opt.mode)}
-                  >
-                    <Text style={[styles.modelChipLabel, active && styles.modelChipLabelActive]}>
-                      {opt.label}
-                    </Text>
-                    <Text style={styles.modelChipDesc}>{opt.desc}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <Text style={styles.modelText}>Whisper Large v3 Turbo · STT</Text>
+              <Text style={styles.footerNote}>Whisper Large v3 Turbo · transcrição (Groq)</Text>
+            </ScrollView>
 
-            {/* Buttons */}
-            <View style={styles.divider} />
             <View style={styles.btnRow}>
               <TouchableOpacity onPress={onClose} style={styles.cancelBtn}>
                 <Text style={styles.cancelText}>CANCELAR</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleSave}
-                style={[styles.saveBtn, !key.trim() && styles.saveBtnDisabled]}
-                disabled={!key.trim()}
-              >
+              <TouchableOpacity onPress={handleSave} style={styles.saveBtn}>
                 <Text style={styles.saveText}>SALVAR</Text>
               </TouchableOpacity>
             </View>
@@ -181,9 +242,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 20,
   },
+  kav: { width: '100%', maxWidth: 420 },
   card: {
     width: '100%',
-    maxWidth: 400,
+    maxHeight: '85%',
     backgroundColor: colors.bgCard,
     borderRadius: 12,
     borderWidth: 1,
@@ -194,8 +256,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 10,
   },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  revealBtn: { padding: 2 },
+  revealIcon: { fontSize: 16 },
   title: {
     color: colors.primary,
     fontSize: 14,
@@ -203,16 +268,9 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     fontWeight: 'bold',
   },
-  closeBtn: {
-    color: colors.textSecondary,
-    fontSize: 18,
-    padding: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: 14,
-  },
+  closeBtn: { color: colors.textSecondary, fontSize: 18, padding: 4 },
+  scroll: { marginBottom: 12 },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: 14 },
   sectionLabel: {
     color: colors.textMuted,
     fontSize: 9,
@@ -220,55 +278,22 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     marginBottom: 6,
   },
-  hint: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontFamily,
-    marginBottom: 10,
-  },
-  link: {
-    color: colors.primary,
-    textDecorationLine: 'underline',
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.borderMedium,
-    borderRadius: 8,
-    backgroundColor: colors.bg,
-    overflow: 'hidden',
-  },
+  hint: { color: colors.textSecondary, fontSize: 12, fontFamily, marginBottom: 8 },
+  link: { color: colors.primary, textDecorationLine: 'underline' },
   input: {
-    flex: 1,
     height: 44,
     paddingHorizontal: 12,
     color: colors.text,
     fontFamily,
     fontSize: 13,
+    borderWidth: 1,
+    borderColor: colors.borderMedium,
+    borderRadius: 8,
+    backgroundColor: colors.bg,
   },
-  eyeBtn: {
-    paddingHorizontal: 12,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  eyeIcon: {
-    fontSize: 16,
-  },
-  modelText: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontFamily,
-    marginBottom: 4,
-  },
-  modelGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
-  },
-  modelChip: {
+  inputSpaced: { marginTop: 8 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  chip: {
     flexBasis: '47%',
     flexGrow: 1,
     borderWidth: 1,
@@ -277,30 +302,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 10,
   },
-  modelChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryMuted,
-  },
-  modelChipLabel: {
+  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryMuted },
+  chipLabel: {
     color: colors.textSecondary,
     fontFamily,
     fontSize: 12,
     letterSpacing: 2,
     fontWeight: 'bold',
   },
-  modelChipLabelActive: {
-    color: colors.primary,
-  },
-  modelChipDesc: {
-    color: colors.textMuted,
-    fontFamily,
-    fontSize: 9,
-    marginTop: 2,
-  },
-  btnRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
+  chipLabelActive: { color: colors.primary },
+  chipDesc: { color: colors.textMuted, fontFamily, fontSize: 9, marginTop: 2 },
+  footerNote: { color: colors.textMuted, fontFamily, fontSize: 10, marginTop: 14 },
+  btnRow: { flexDirection: 'row', gap: 10 },
   cancelBtn: {
     flex: 1,
     height: 42,
@@ -310,12 +323,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelText: {
-    color: colors.textMuted,
-    fontFamily,
-    fontSize: 12,
-    letterSpacing: 2,
-  },
+  cancelText: { color: colors.textMuted, fontFamily, fontSize: 12, letterSpacing: 2 },
   saveBtn: {
     flex: 1,
     height: 42,
@@ -325,10 +333,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primaryMuted,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  saveBtnDisabled: {
-    borderColor: colors.border,
-    backgroundColor: 'transparent',
   },
   saveText: {
     color: colors.primary,

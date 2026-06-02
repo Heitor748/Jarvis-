@@ -18,20 +18,25 @@ import { InputBar } from '../components/InputBar';
 import { SettingsModal } from '../components/SettingsModal';
 import { ScanLines } from '../components/ScanLines';
 import { colors, fontFamily } from '../constants/theme';
-import { modelLabelForMode } from '../constants/models';
+import { providerLabelForMode } from '../constants/providers';
 
 export default function HomeScreen() {
   const {
     state,
     messages,
     apiKey,
+    flowKey,
+    agnesKey,
+    agnesConfig,
     elevenKey,
-    modelMode,
+    providerMode,
     error,
     isReady,
     saveApiKey,
+    saveFlowKey,
+    saveAgnes,
     saveElevenKey,
-    saveModelMode,
+    saveProviderMode,
     sendText,
     toggleListening,
     clearHistory,
@@ -102,7 +107,7 @@ export default function HomeScreen() {
 
           {/* System info */}
           <View style={styles.sysInfo}>
-            <Text style={styles.sysText}>GROQ · {modelLabelForMode(modelMode)}</Text>
+            <Text style={styles.sysText}>IA · {providerLabelForMode(providerMode)}</Text>
             <Text style={styles.sysText}>{elevenKey ? '🎙 VOZ HD' : '🔊 VOZ PADRÃO'}</Text>
             <Text style={styles.sysText}>
               {apiKey ? '🔑 OK' : '⚠ SEM CHAVE'}
@@ -145,12 +150,17 @@ export default function HomeScreen() {
       {/* Settings Modal */}
       <SettingsModal
         visible={showSettings}
-        currentKey={apiKey}
+        groqKey={apiKey}
+        flowKey={flowKey}
+        agnesKey={agnesKey}
+        agnesConfig={agnesConfig}
         elevenKey={elevenKey}
-        modelMode={modelMode}
-        onSave={saveApiKey}
+        providerMode={providerMode}
+        onSaveGroq={saveApiKey}
+        onSaveFlow={saveFlowKey}
+        onSaveAgnes={saveAgnes}
         onSaveEleven={saveElevenKey}
-        onSaveModelMode={saveModelMode}
+        onSaveProviderMode={saveProviderMode}
         onClose={() => setShowSettings(false)}
       />
     </SafeAreaView>

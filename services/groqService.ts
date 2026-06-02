@@ -1,6 +1,7 @@
-import { GROQ_MODEL, WHISPER_MODEL } from '../constants/personality';
-import { MODELS } from '../constants/models';
+import { WHISPER_MODEL } from '../constants/personality';
+import { ResolvedProvider } from '../constants/providers';
 
+// Transcricao (Whisper) e sempre via Groq.
 const GROQ_BASE = 'https://api.groq.com/openai/v1';
 
 export interface ChatMessage {
@@ -38,19 +39,23 @@ export async function transcribeAudio(
   return (data.text ?? '').trim();
 }
 
+/**
+ * Chat completion generico compativel com OpenAI.
+ * Funciona para Groq, SiliconFlow e Agnes (qualquer endpoint /chat/completions).
+ */
 export async function chatCompletion(
   messages: ChatMessage[],
-  apiKey: string,
-  model: string = MODELS.scout.id
+  provider: ResolvedProvider
 ): Promise<string> {
-  const res = await fetch(`${GROQ_BASE}/chat/completions`, {
+  const base = provider.baseUrl.replace(/\/+$/, '');
+  const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${provider.apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: model || GROQ_MODEL,
+      model: provider.model,
       messages,
       max_tokens: 1024,
       temperature: 0.7,
