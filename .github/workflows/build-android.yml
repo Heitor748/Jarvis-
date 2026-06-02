@@ -30,29 +30,19 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --no-install
 
-      - name: Configure Gradle
+      - name: Patch Kotlin version to 1.9.25
         run: |
           echo "org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=512m" >> android/gradle.properties
           echo "org.gradle.daemon=false" >> android/gradle.properties
-          mkdir -p ~/.gradle/init.d
-          cp scripts/gradle-init.gradle ~/.gradle/init.d/compose-compat.gradle
-
-      - name: Show generated build files
-        run: |
-          echo "=== android/build.gradle ==="
-          cat android/build.gradle
-          echo ""
-          echo "=== android/app/build.gradle ==="
-          cat android/app/build.gradle
-          echo ""
-          echo "=== android/gradle.properties ==="
-          cat android/gradle.properties
+          python3 scripts/patch-kotlin-version.py
+          echo "=== android/build.gradle (first 30 lines) ==="
+          head -30 android/build.gradle
 
       - name: Build APK debug
         run: |
           set -o pipefail
           chmod +x android/gradlew
-          cd android && ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee /tmp/build.log
+          cd android && ./gradlew assembleDebug --no-daemon 2>&1 | tee /tmp/build.log
 
       - name: Upload build log
         if: always()
